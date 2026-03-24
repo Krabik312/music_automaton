@@ -1,6 +1,6 @@
 # ================================================
 # main.py
-# ГЛАВНЫЙ ФАЙЛ
+# ГЛАВНЫЙ ФАЙЛ — соединяет всё вместе
 # ================================================
 
 import pygame
@@ -8,11 +8,8 @@ import sys
 import ctypes
 import random
 from music_engine import (ProbabilisticAutomaton,
-                           create_melody_sound,
-                           create_bass_sound,
-                           create_kick,
-                           create_snare,
-                           create_hat,
+                           initialize_sounds,
+                           play_step,
                            MAJOR_NOTES,
                            MINOR_NOTES)
 from ui import (draw_ui,
@@ -26,7 +23,7 @@ pygame.init()
 pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=4096)
 pygame.mixer.init()
 
-# ←←← ВАЖНО: инициализируем шрифты ТОЛЬКО здесь
+# Инициализация шрифтов (после pygame.init())
 init_fonts()
 
 screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
@@ -47,22 +44,8 @@ bpm = 120
 step_duration_ms = 60000 // (bpm * 4)
 drum_step = 0
 
-melody_ch = pygame.mixer.Channel(0)
-bass_ch    = pygame.mixer.Channel(1)
-kick_ch    = pygame.mixer.Channel(2)
-snare_ch   = pygame.mixer.Channel(3)
-hat_ch     = pygame.mixer.Channel(4)
-
-# Создаём звуки
-melody_sounds = {note: create_melody_sound(freq) for note, freq in MAJOR_NOTES.items()}
-bass_sounds   = {note: create_bass_sound(freq / 2) for note, freq in MAJOR_NOTES.items()}
-kick_sound = create_kick()
-snare_sound = create_snare()
-hat_sound = create_hat()
-
-drum_pattern = [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0]
-snare_pattern = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0]
-hat_pattern = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
+# Создаём все звуки один раз
+sounds = initialize_sounds()
 
 update_button_positions(WIDTH, HEIGHT)
 
@@ -77,7 +60,7 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
 
-            # Основные кнопки
+            # === ОСНОВНЫЕ КНОПКИ ===
             main_btns = [
                 {"rect": pygame.Rect(80, HEIGHT-140, 220, 80), "action": "create"},
                 {"rect": pygame.Rect(320, HEIGHT-140, 220, 80), "action": "start"},
@@ -93,36 +76,30 @@ while running:
                         current_melody_idx = 0
                         drum_step = 0
                         is_playing = False
-                        melody_ch.stop()
-                        bass_ch.stop()
+                        pygame.mixer.stop()          # останавливаем всё сразу
                     elif btn["action"] == "start" and track_melody:
                         is_playing = True
                         next_step_time = pygame.time.get_ticks()
                     elif btn["action"] == "pause":
                         is_playing = False
-                        melody_ch.stop()
-                        bass_ch.stop()
+                        pygame.mixer.stop()
                     elif btn["action"] == "reset":
                         is_playing = False
-                        melody_ch.stop()
-                        bass_ch.stop()
+                        pygame.mixer.stop()
                         track_melody = []
                         track_bass = []
                     elif btn["action"] == "exit":
                         running = False
 
-            # Кнопки настроек
+            # === КНОПКИ НАСТРОЕК ===
             for btn in settings_buttons:
                 if btn["rect"].collidepoint(pos):
                     if btn["action"] == "toggle_scale":
                         new_scale = "minor" if automaton.scale == "major" else "major"
                         automaton = ProbabilisticAutomaton(new_scale, automaton.chaos)
                         notes_dict = MAJOR_NOTES if new_scale == "major" else MINOR_NOTES
-                        melody_sounds.clear()
-                        bass_sounds.clear()
-                        for note, freq in notes_dict.items():
-                            melody_sounds[note] = create_melody_sound(freq)
-                            bass_sounds[note] = create_bass_sound(freq / 2)
+                        # Пересоздаём звуки под новый лад
+                        sounds = initialize_sounds()   # важный момент!
                         track_melody = []
                         track_bass = []
                         is_playing = False
@@ -138,27 +115,17 @@ while running:
                         bpm = max(40, bpm - 10)
                         step_duration_ms = 60000 // (bpm * 4)
 
+    # ====================== ВОСПРОИЗВЕДЕНИЕ ======================
     if is_playing:
         now = pygame.time.get_ticks()
         if now >= next_step_time:
-            if drum_pattern[drum_step % 16]:
-                kick_ch.play(kick_sound)
-            if snare_pattern[drum_step % 16]:
-                snare_ch.play(snare_sound)
-            if hat_pattern[drum_step % 16]:
-                hat_ch.play(hat_sound)
-
-            if track_melody:
-                note = track_melody[current_melody_idx % len(track_melody)]
-                melody_ch.play(melody_sounds[note])
-            if track_bass:
-                bass_note = track_bass[current_melody_idx % len(track_bass)]
-                bass_ch.play(bass_sounds[bass_note])
+            play_step(sounds, track_melody, track_bass, current_melody_idx, drum_step)
 
             next_step_time = now + step_duration_ms
             drum_step += 1
             current_melody_idx += 1
 
+    # Отрисовка интерфейса
     draw_ui(screen, automaton, track_melody, is_playing, current_melody_idx, bpm, WIDTH, HEIGHT)
     clock.tick(FPS)
 
