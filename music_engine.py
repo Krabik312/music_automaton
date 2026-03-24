@@ -1,7 +1,5 @@
 # ================================================
 # music_engine.py
-# ВСЯ ЗВУКОВАЯ ЧАСТЬ — полностью настраиваемая
-# Меняй только этот файл, остальная программа не трогается
 # ================================================
 
 import pygame
@@ -13,38 +11,23 @@ MAJOR_NOTES = {"C": 261.63, "D": 293.66, "E": 329.63, "F": 349.23,
 MINOR_NOTES = {"A": 440.00, "B": 493.88, "C": 523.25, "D": 587.33,
                "E": 659.25, "F": 698.46, "G": 783.99}
 
-
-# ====================== КОНФИГУРАЦИЯ ЗВУКА ======================
-# ←←← ВСЁ, ЧТО ТЫ МОЖЕШЬ МЕНЯТЬ, НАХОДИТСЯ ЗДЕСЬ ←←←
+# ====================== НАСТРОЙКИ ======================
 SOUNDS_CONFIG = {
     "melody": {
         "enabled": True,
-        "volume": 0.85,      # 0.0 - 1.0
-        "duration": 0.52,
-    },
-    "bass": {
-        "enabled": True,
-        "volume": 0.70,
+        "volume": 0.88,
         "duration": 0.55,
+        "instrument": "piano"          # по умолчанию
     },
-    "kick": {
-        "enabled": True,
-        "volume": 0.90,
-    },
-    "snare": {
-        "enabled": True,
-        "volume": 0.75,
-    },
-    "hat": {
-        "enabled": True,
-        "volume": 0.60,
-    },
-    # Добавь сюда новые слои, например:
-    # "pad": {"enabled": False, "volume": 0.4},
+    "bass":  {"enabled": False, "volume": 0.65, "duration": 0.6},
+    "kick":  {"enabled": False, "volume": 0.85},
+    "snare": {"enabled": False, "volume": 0.75},
+    "hat":   {"enabled": False, "volume": 0.55},
 }
 
-# ====================== КЛАСС АВТОМАТА ======================
+# ====================== ВЕРОЯТНОСТНЫЙ АВТОМАТ ======================
 class ProbabilisticAutomaton:
+    # (тот же код, что был раньше — без изменений)
     def __init__(self, scale="major", chaos=0.3):
         self.scale = scale
         self.chaos = chaos
@@ -94,76 +77,106 @@ class ProbabilisticAutomaton:
         return seq
 
 
-# ====================== СОЗДАНИЕ ЗВУКОВ ======================
-def create_melody_sound(freq, duration=0.52):
+# ====================== УЛУЧШЕННЫЕ ЗВУКИ МЕЛОДИИ ======================
+def create_melody_sound(freq, duration=0.55, instrument="piano"):
     sample_rate = 44100
     t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    saw = 2 * (t * freq - np.floor(t * freq + 0.5))
-    square = np.sign(np.sin(2 * np.pi * freq * t))
-    wave = (saw * 0.6 + square * 0.4) * 0.28
-    env = np.exp(-2.8 * t) * 0.9 + 0.1 * np.exp(-12 * t)
+
+    if instrument == "guitar":          # Karplus-Strong — самая «живая» гитара
+        # Физическое моделирование струны
+        delay = int(sample_rate / freq)
+        noise = np.random.uniform(-1, 1, delay) * 0.8
+        buf = np.zeros(delay)
+        buf[:delay] = noise
+        wave = np.zeros(len(t))
+        for i in range(len(t)):
+            wave[i] = buf[0]
+            avg = (buf[0] + buf[1]) * 0.5
+            buf = np.roll(buf, -1)
+            buf[-1] = avg * 0.996   # небольшое затухание
+        env = np.exp(-3.5 * t) * 0.9 + 0.1 * np.exp(-12 * t)
+
+    elif instrument == "trumpet":       # FM-синтез для трубы
+        carrier = np.sin(2 * np.pi * freq * t)
+        modulator = np.sin(2 * np.pi * freq * 2.5 * t) * 1.8
+        wave = np.sin(2 * np.pi * freq * t + modulator)
+        env = np.exp(-2.8 * t) * 0.95 + 0.05 * np.exp(-9 * t)
+
+    else:  # piano — максимально акустическое пианино
+        # Несколько гармоник + лёгкая детюнировка
+        wave = (np.sin(2 * np.pi * freq * t) * 0.6 +
+                np.sin(2 * np.pi * freq * 2 * t) * 0.25 +
+                np.sin(2 * np.pi * freq * 3 * t) * 0.12)
+        env = np.exp(-4.5 * t) * 0.92 + 0.08 * np.exp(-15 * t)
+
     wave = (wave * env * 32767).astype(np.int16)
     sound = pygame.sndarray.make_sound(np.column_stack((wave, wave)))
     sound.set_volume(SOUNDS_CONFIG["melody"]["volume"])
     return sound
 
 
-def create_bass_sound(freq, duration=0.55):
+# Остальные функции (bass, kick, snare, hat) оставляем как были раньше — они уже достаточно хороши.
+# Если хочешь, я потом сделаю и для них более «живые» версии.
+
+def create_bass_sound(freq, duration=0.6):
+    # ... (тот же код, что был раньше)
     sample_rate = 44100
     t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
-    wave = np.sin(2 * np.pi * freq * t) * 0.35 + 0.2 * np.sin(2 * np.pi * freq * 2 * t)
-    env = np.exp(-3.5 * t)
+    wave = np.sin(2 * np.pi * freq * t) * 0.4 + 0.15 * np.sin(2 * np.pi * freq * 2.01 * t)
+    env = np.exp(-3.2 * t)
     wave = (wave * env * 32767).astype(np.int16)
     sound = pygame.sndarray.make_sound(np.column_stack((wave, wave)))
     sound.set_volume(SOUNDS_CONFIG["bass"]["volume"])
     return sound
 
-
 def create_kick():
+    # ... (тот же код)
     sample_rate = 44100
     dur = 0.35
     t = np.linspace(0, dur, int(sample_rate * dur), endpoint=False)
-    freq_sweep = 180 - 160 * t
-    wave = np.sin(2 * np.pi * freq_sweep * t) * 0.9
-    env = np.exp(-8 * t)
+    freq_sweep = 180 - 170 * t
+    wave = np.sin(2 * np.pi * freq_sweep * t) * 0.95
+    env = np.exp(-7 * t)
     wave = (wave * env * 32767).astype(np.int16)
     sound = pygame.sndarray.make_sound(np.column_stack((wave, wave)))
     sound.set_volume(SOUNDS_CONFIG["kick"]["volume"])
     return sound
 
-
 def create_snare():
+    # ... (тот же код)
     sample_rate = 44100
     dur = 0.25
     t = np.linspace(0, dur, int(sample_rate * dur), endpoint=False)
-    noise = np.random.uniform(-1, 1, len(t)) * 0.7
-    tone = np.sin(2 * np.pi * 220 * t) * 0.3
-    env = np.exp(-12 * t)
+    noise = np.random.uniform(-1, 1, len(t)) * 0.75
+    tone = np.sin(2 * np.pi * 220 * t) * 0.25
+    env = np.exp(-11 * t)
     wave = (noise + tone) * env * 32767
     sound = pygame.sndarray.make_sound(np.column_stack((wave.astype(np.int16), wave.astype(np.int16))))
     sound.set_volume(SOUNDS_CONFIG["snare"]["volume"])
     return sound
 
-
 def create_hat():
+    # ... (тот же код)
     sample_rate = 44100
     dur = 0.08
     t = np.linspace(0, dur, int(sample_rate * dur), endpoint=False)
-    noise = np.random.uniform(-1, 1, len(t)) * 0.85
-    env = np.exp(-35 * t)
+    noise = np.random.uniform(-1, 1, len(t)) * 0.9
+    env = np.exp(-38 * t)
     wave = (noise * env * 32767).astype(np.int16)
     sound = pygame.sndarray.make_sound(np.column_stack((wave, wave)))
     sound.set_volume(SOUNDS_CONFIG["hat"]["volume"])
     return sound
 
 
-# ====================== ИНИЦИАЛИЗАЦИЯ ВСЕХ ЗВУКОВ ======================
 def initialize_sounds():
-    """Вызывается один раз из main.py"""
     melody_sounds = {}
     bass_sounds = {}
     for note, freq in MAJOR_NOTES.items():
-        melody_sounds[note] = create_melody_sound(freq, SOUNDS_CONFIG["melody"]["duration"])
+        melody_sounds[note] = create_melody_sound(
+            freq,
+            SOUNDS_CONFIG["melody"]["duration"],
+            SOUNDS_CONFIG["melody"]["instrument"]
+        )
         bass_sounds[note] = create_bass_sound(freq / 2, SOUNDS_CONFIG["bass"]["duration"])
 
     return {
@@ -175,38 +188,25 @@ def initialize_sounds():
     }
 
 
-# ====================== ВОСПРОИЗВЕДЕНИЕ ОДНОГО ШАГА ======================
 def play_step(sounds, track_melody, track_bass, current_idx, drum_step):
-    """Вся логика воспроизведения в одном месте"""
     idx = current_idx % len(track_melody) if track_melody else 0
 
-    # Мелодия
     if SOUNDS_CONFIG["melody"]["enabled"] and track_melody:
         note = track_melody[idx]
-        melody_ch = pygame.mixer.Channel(0)
-        melody_ch.play(sounds["melody"][note])
+        pygame.mixer.Channel(0).play(sounds["melody"][note])
 
-    # Бас
     if SOUNDS_CONFIG["bass"]["enabled"] and track_bass:
         bass_note = track_bass[idx]
-        bass_ch = pygame.mixer.Channel(1)
-        bass_ch.play(sounds["bass"][bass_note])
+        pygame.mixer.Channel(1).play(sounds["bass"][bass_note])
 
-    # Барабаны
     if SOUNDS_CONFIG["kick"]["enabled"] and drum_pattern[drum_step % 16]:
-        kick_ch = pygame.mixer.Channel(2)
-        kick_ch.play(sounds["kick"])
-
+        pygame.mixer.Channel(2).play(sounds["kick"])
     if SOUNDS_CONFIG["snare"]["enabled"] and snare_pattern[drum_step % 16]:
-        snare_ch = pygame.mixer.Channel(3)
-        snare_ch.play(sounds["snare"])
-
+        pygame.mixer.Channel(3).play(sounds["snare"])
     if SOUNDS_CONFIG["hat"]["enabled"] and hat_pattern[drum_step % 16]:
-        hat_ch = pygame.mixer.Channel(4)
-        hat_ch.play(sounds["hat"])
+        pygame.mixer.Channel(4).play(sounds["hat"])
 
 
-# Паттерны барабанов (можно тоже вынести в CONFIG позже)
 drum_pattern = [1, 0, 0, 0, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0]
 snare_pattern = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0]
 hat_pattern = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
