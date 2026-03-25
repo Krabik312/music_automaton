@@ -1,5 +1,6 @@
 # ================================================
 # main.py
+# ГЛАВНЫЙ ФАЙЛ — соединяет всё вместе
 # ================================================
 
 import pygame
@@ -15,9 +16,9 @@ from music_engine import (ProbabilisticAutomaton,
 
 from ui import (draw_ui,
                 update_button_positions,
-                update_instrument_buttons,   # ← добавлено
+                update_instrument_buttons,   # новые кнопки инструментов
                 settings_buttons,
-                instrument_buttons,          # ← добавлено
+                instrument_buttons,          # новые кнопки инструментов
                 init_fonts)
 
 ctypes.windll.user32.SetProcessDPIAware()
@@ -35,7 +36,7 @@ pygame.display.set_caption("Вероятностные автоматы: ген�
 clock = pygame.time.Clock()
 FPS = 60
 
-# Инициализация
+# ====================== ИНИЦИАЛИЗАЦИЯ ======================
 automaton = ProbabilisticAutomaton(scale="major", chaos=0.25)
 track_melody = []
 track_bass = []
@@ -49,7 +50,7 @@ drum_step = 0
 sounds = initialize_sounds()
 
 update_button_positions(WIDTH, HEIGHT)
-update_instrument_buttons(WIDTH, HEIGHT)          # ← важно!
+update_instrument_buttons(WIDTH, HEIGHT)          # ← обновляем позиции кнопок инструментов
 
 
 # ====================== ОСНОВНОЙ ЦИКЛ ======================
@@ -62,7 +63,7 @@ while running:
         elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             pos = event.pos
 
-            # Основные кнопки
+            # === ОСНОВНЫЕ КНОПКИ ===
             main_btns = [
                 {"rect": pygame.Rect(80, HEIGHT-140, 220, 80), "action": "create"},
                 {"rect": pygame.Rect(320, HEIGHT-140, 220, 80), "action": "start"},
@@ -93,15 +94,15 @@ while running:
                     elif btn["action"] == "exit":
                         running = False
 
-            # Кнопки выбора инструмента
+            # === КНОПКИ ВЫБОРА ИНСТРУМЕНТА (Гитара / Пианино / Труба) ===
             for btn in instrument_buttons:
                 if btn["rect"].collidepoint(pos):
                     new_inst = btn["action"]
                     SOUNDS_CONFIG["melody"]["instrument"] = new_inst
-                    sounds = initialize_sounds()
+                    sounds = initialize_sounds()          # перезагружаем звук
                     print(f"✅ Инструмент изменён на: {new_inst}")
 
-            # Кнопки настроек
+            # === КНОПКИ НАСТРОЕК (лад, хаос, bpm) ===
             for btn in settings_buttons:
                 if btn["rect"].collidepoint(pos):
                     if btn["action"] == "toggle_scale":
@@ -123,6 +124,7 @@ while running:
                         bpm = max(40, bpm - 10)
                         step_duration_ms = 60000 // (bpm * 4)
 
+    # ====================== ВОСПРОИЗВЕДЕНИЕ ======================
     if is_playing:
         now = pygame.time.get_ticks()
         if now >= next_step_time:
@@ -131,7 +133,10 @@ while running:
             drum_step += 1
             current_melody_idx += 1
 
-    draw_ui(screen, automaton, track_melody, is_playing, current_melody_idx, bpm, WIDTH, HEIGHT)
+    # Отрисовка (ВАЖНО: передаём текущий инструмент)
+    draw_ui(screen, automaton, track_melody, is_playing, current_melody_idx, bpm, WIDTH, HEIGHT,
+            current_instrument=SOUNDS_CONFIG["melody"]["instrument"])
+
     clock.tick(FPS)
 
 pygame.quit()

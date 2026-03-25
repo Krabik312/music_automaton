@@ -19,10 +19,10 @@ SOUNDS_CONFIG = {
         "duration": 0.55,
         "instrument": "piano"          # по умолчанию
     },
-    "bass":  {"enabled": False, "volume": 0.65, "duration": 0.6},
-    "kick":  {"enabled": False, "volume": 0.85},
-    "snare": {"enabled": False, "volume": 0.75},
-    "hat":   {"enabled": False, "volume": 0.55},
+    "bass":  {"enabled": False, "volume": 0.4, "duration": 0.2},
+    "kick":  {"enabled": True, "volume": 0.5},
+    "snare": {"enabled": True, "volume": 0.15},
+    "hat":   {"enabled": True, "volume": 0.1},
 }
 
 # ====================== ВЕРОЯТНОСТНЫЙ АВТОМАТ ======================
@@ -82,39 +82,31 @@ def create_melody_sound(freq, duration=0.55, instrument="piano"):
     sample_rate = 44100
     t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
 
-    if instrument == "guitar":          # Karplus-Strong — самая «живая» гитара
-        # Физическое моделирование струны
+    if instrument == "guitar":
+        # Тот вариант гитары, который тебе раньше нравился
         delay = int(sample_rate / freq)
-        noise = np.random.uniform(-1, 1, delay) * 0.8
+        noise = np.random.uniform(-1, 1, delay) * 0.95
         buf = np.zeros(delay)
-        buf[:delay] = noise
+        buf[:] = noise
         wave = np.zeros(len(t))
         for i in range(len(t)):
             wave[i] = buf[0]
             avg = (buf[0] + buf[1]) * 0.5
             buf = np.roll(buf, -1)
-            buf[-1] = avg * 0.996   # небольшое затухание
-        env = np.exp(-3.5 * t) * 0.9 + 0.1 * np.exp(-12 * t)
+            buf[-1] = avg * 0.994
+        wave += 0.12 * np.sin(2 * np.pi * 80 * t)
+        env = np.exp(-3.0 * t) * 0.95
 
-    elif instrument == "trumpet":       # FM-синтез для трубы
-        carrier = np.sin(2 * np.pi * freq * t)
-        modulator = np.sin(2 * np.pi * freq * 2.5 * t) * 1.8
-        wave = np.sin(2 * np.pi * freq * t + modulator)
-        env = np.exp(-2.8 * t) * 0.95 + 0.05 * np.exp(-9 * t)
-
-    else:  # piano — максимально акустическое пианино
-        # Несколько гармоник + лёгкая детюнировка
-        wave = (np.sin(2 * np.pi * freq * t) * 0.6 +
-                np.sin(2 * np.pi * freq * 2 * t) * 0.25 +
-                np.sin(2 * np.pi * freq * 3 * t) * 0.12)
-        env = np.exp(-4.5 * t) * 0.92 + 0.08 * np.exp(-15 * t)
+    else:  # piano
+        wave = (np.sin(2 * np.pi * freq * t) * 0.62 +
+                np.sin(2 * np.pi * freq * 2.01 * t) * 0.28 +
+                np.sin(2 * np.pi * freq * 3 * t) * 0.10)
+        env = np.exp(-4.1 * t) * 0.93
 
     wave = (wave * env * 32767).astype(np.int16)
     sound = pygame.sndarray.make_sound(np.column_stack((wave, wave)))
     sound.set_volume(SOUNDS_CONFIG["melody"]["volume"])
     return sound
-
-
 # Остальные функции (bass, kick, snare, hat) оставляем как были раньше — они уже достаточно хороши.
 # Если хочешь, я потом сделаю и для них более «живые» версии.
 
